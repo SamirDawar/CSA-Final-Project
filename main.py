@@ -3,6 +3,7 @@ import mediapipe as mp
 import speech_recognition as sr
 import pyautogui
 import threading
+import time
 
 # Function to simulate key presses based on voice commands
 def simulate_key_press(command):
@@ -17,10 +18,14 @@ def simulate_key_press(command):
     # Add more commands as needed
 
 # Function to simulate key presses based on hand position
-def simulate_key_press_hand(hand_position, screen_width, screen_height):
+def simulate_key_press_hand(hand_position, screen_width, screen_height, no_input_box):
     x, y = hand_position
     key_width = screen_width // 2
     key_height = screen_height // 2
+
+    # Check if hand is in the no-input box
+    if no_input_box[0] < x < no_input_box[2] and no_input_box[1] < y < no_input_box[3]:
+        return  # Hand is in the no-input box, do nothing
 
     if x < key_width:
         if y < key_height:
@@ -55,6 +60,7 @@ def listen_for_commands():
             print("Could not understand audio")
         except sr.RequestError as e:
             print("Could not request results; {0}".format(e))
+        time.sleep(0.1)  # Prevent tight loop
 
 # Function to continuously track hand position and simulate key presses
 def track_hand():
@@ -63,6 +69,18 @@ def track_hand():
     mp_drawing = mp.solutions.drawing_utils
 
     cap = cv2.VideoCapture(0)
+    screen_width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+    screen_height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+
+    # Define the no-input box dimensions
+    no_input_box_width = int(screen_width * 0.2)
+    no_input_box_height = int(screen_height * 0.2)
+    no_input_box = (
+        int(screen_width / 2 - no_input_box_width / 2),
+        int(screen_height / 2 - no_input_box_height / 2),
+        int(screen_width / 2 + no_input_box_width / 2),
+        int(screen_height / 2 + no_input_box_height / 2)
+    )
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -87,12 +105,17 @@ def track_hand():
                 cv2.circle(frame, hand_position, 10, (0, 255, 0), -1)
 
                 # Simulate key press based on hand position
-                simulate_key_press_hand(hand_position, w, h)
+                simulate_key_press_hand(hand_position, w, h, no_input_box)
+
+        # Draw the no-input box
+        cv2.rectangle(frame, (no_input_box[0], no_input_box[1]), (no_input_box[2], no_input_box[3]), (0, 0, 255), 2)
 
         cv2.imshow('Hand Tracking', frame)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
+
+        time.sleep(0.01)  # Allow other threads to run
 
     cap.release()
     cv2.destroyAllWindows()
@@ -110,4 +133,4 @@ if __name__ == "__main__":
 
     # Main thread continues to execute other tasks or waits for termination
     while True:
-        pass
+        time.sleep(1)  # Prevent tight loop
