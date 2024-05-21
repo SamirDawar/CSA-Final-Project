@@ -5,17 +5,33 @@ import pyautogui
 import threading
 import time
 
+# Dictionary to keep track of key states
+key_states = {'w': False, 'a': False, 's': False, 'd': False}
+
+# Function to press and release a key after a delay
+def press_and_release_key(key):
+    pyautogui.keyDown(key)
+    time.sleep(3)  # Hold the key for 3 seconds
+    pyautogui.keyUp(key)
+    key_states[key] = False  # Update key state
+
 # Function to simulate key presses based on voice commands
 def simulate_key_press(command):
     if command == "forward":
-        pyautogui.press('w')
+        key = 'w'
     elif command == "backward":
-        pyautogui.press('s')
+        key = 's'
     elif command == "left":
-        pyautogui.press('a')
+        key = 'a'
     elif command == "right":
-        pyautogui.press('d')
-    # Add more commands as needed
+        key = 'd'
+    else:
+        return
+    
+    # Press and release the key after a delay
+    if not key_states[key]:
+        key_states[key] = True
+        threading.Thread(target=press_and_release_key, args=(key,)).start()
 
 # Function to simulate key presses based on hand position
 def simulate_key_press_hand(hand_position, screen_width, screen_height, no_input_box):
@@ -25,18 +41,28 @@ def simulate_key_press_hand(hand_position, screen_width, screen_height, no_input
 
     # Check if hand is in the no-input box
     if no_input_box[0] < x < no_input_box[2] and no_input_box[1] < y < no_input_box[3]:
+        for key in key_states:
+            if key_states[key]:
+                pyautogui.keyUp(key)
+                key_states[key] = False
         return  # Hand is in the no-input box, do nothing
 
     if x < key_width:
         if y < key_height:
-            pyautogui.press('w')  # Upper left quadrant
+            press_key('w')  # Upper left quadrant
         else:
-            pyautogui.press('a')  # Lower left quadrant
+            press_key('a')  # Lower left quadrant
     else:
         if y < key_height:
-            pyautogui.press('d')  # Upper right quadrant
+            press_key('d')  # Upper right quadrant
         else:
-            pyautogui.press('s')  # Lower right quadrant
+            press_key('s')  # Lower right quadrant
+
+# Function to press and release a key
+def press_key(key):
+    if not key_states[key]:
+        pyautogui.keyDown(key)
+        key_states[key] = True
 
 # Function to continuously listen for voice commands
 def listen_for_commands():
@@ -49,17 +75,21 @@ def listen_for_commands():
     print("Listening for commands...")
 
     while True:
-        with microphone as source:
-            audio = recognizer.listen(source)
-
         try:
-            command = recognizer.recognize_google(audio).lower()
-            print("Recognized command:", command)
-            simulate_key_press(command)
-        except sr.UnknownValueError:
-            print("Could not understand audio")
-        except sr.RequestError as e:
-            print("Could not request results; {0}".format(e))
+            with microphone as source:
+                audio = recognizer.listen(source)
+
+            try:
+                command = recognizer.recognize_google(audio).lower()
+                print("Recognized command:", command)
+                simulate_key_press(command)
+            except sr.UnknownValueError:
+                print("Could not understand audio")
+            except sr.RequestError as e:
+                print("Could not request results; {0}".format(e))
+        except Exception as e:
+            print(f"Error occurred: {e}")
+
         time.sleep(0.1)  # Prevent tight loop
 
 # Function to continuously track hand position and simulate key presses
@@ -69,8 +99,8 @@ def track_hand():
     mp_drawing = mp.solutions.drawing_utils
 
     cap = cv2.VideoCapture(0)
-    screen_width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-    screen_height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+    screen_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    screen_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
     # Define the no-input box dimensions
     no_input_box_width = int(screen_width * 0.2)
